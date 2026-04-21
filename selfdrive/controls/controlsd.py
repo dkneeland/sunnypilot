@@ -27,6 +27,7 @@ LaneChangeState = log.LaneChangeState
 LaneChangeDirection = log.LaneChangeDirection
 
 ACTUATOR_FIELDS = tuple(car.CarControl.Actuators.schema.fields.keys())
+TESLA_STEER_RATIO_TEST_OVERRIDE = 12.0
 
 
 class Controls(ControlsExt):
@@ -81,6 +82,8 @@ class Controls(ControlsExt):
     lp = self.sm['liveParameters']
     x = max(lp.stiffnessFactor, 0.1)
     sr = max(lp.steerRatio, 0.1)
+    if self.CP.brand == 'tesla':
+      sr = TESLA_STEER_RATIO_TEST_OVERRIDE
     self.VM.update_params(x, sr)
 
     steer_angle_without_offset = math.radians(CS.steeringAngleDeg - lp.angleOffsetDeg)
