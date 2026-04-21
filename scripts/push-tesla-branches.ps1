@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 
 param(
-  [string]$Branch = "tesla-combined"
+  [string]$Branch = "t-combo"
 )
 
 function Invoke-Git {

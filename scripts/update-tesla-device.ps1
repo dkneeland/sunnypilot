@@ -5,7 +5,7 @@ param(
   [string]$SshUser = "comma",
   [string]$SshKeyPath = "C:\Users\dave\.ssh\comma",
   [string]$RepoOwner = "dkneeland",
-  [string]$Branch = "tesla-combined",
+  [string]$Branch = "t-combo",
   [switch]$Reboot
 )
 

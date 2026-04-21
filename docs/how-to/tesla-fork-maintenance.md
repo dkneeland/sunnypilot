@@ -7,7 +7,7 @@ This is the maintenance playbook for your Tesla dzid-port fork so you can keep i
 ## What Was Cleansed in This Session
 
 - Created a real working branch in `opendbc_repo` (it was detached HEAD):
-  - `tesla-baseline`
+  - `t-baseline`
 - Kept the validated integration fix in place:
   - `opendbc_repo/opendbc/safety/modes/tesla.h` uses `!(controls_allowed || controls_allowed_lateral)`
 - Added reproducible validation tooling/docs:
@@ -17,8 +17,8 @@ This is the maintenance playbook for your Tesla dzid-port fork so you can keep i
   - `origin` -> `https://github.com/dkneeland/opendbc.git`
   - `upstream` -> `https://github.com/sunnypilot/opendbc.git`
 - Pushed feature branches so both repos now have remote tracking:
-  - superproject `tesla-baseline` -> `origin/tesla-baseline`
-  - submodule `tesla-baseline` -> `origin/tesla-baseline`
+  - superproject `t-baseline` -> `origin/t-baseline`
+  - submodule `t-baseline` -> `origin/t-baseline`
 
 ## Fork Model (Important)
 
@@ -42,12 +42,12 @@ Always remember: the superproject only stores a pointer to an opendbc commit. If
 
 ## Branch Strategy
 
-- Superproject baseline branch: `tesla-baseline`
-- Opendbc baseline branch: `tesla-baseline`
+- Superproject baseline branch: `t-baseline`
+- Opendbc baseline branch: `t-baseline`
 - Feature test branches:
-  - `tesla-lkas-bypass`
-  - `tesla-steer-ratio-test`
-  - `tesla-combined`
+  - `t-lkas-bypass`
+  - `t-steer-ratio-test`
+  - `t-combo`
 - Never do Tesla port work directly on `master` in either repo.
 
 ## Daily Maintenance Workflow
@@ -61,7 +61,7 @@ git pull --ff-only upstream master
 
 2. Rebase your Tesla branch:
 ```bash
-git switch tesla-baseline
+git switch t-baseline
 git rebase master
 ```
 
@@ -70,7 +70,7 @@ git rebase master
 git -C opendbc_repo fetch upstream
 git -C opendbc_repo switch master
 git -C opendbc_repo pull --ff-only upstream master
-git -C opendbc_repo switch tesla-baseline
+git -C opendbc_repo switch t-baseline
 git -C opendbc_repo rebase master
 ```
 
@@ -104,7 +104,7 @@ This prevents broken submodule pointers.
 PowerShell helper for steps 2 and 4:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\push-tesla-branches.ps1 -Branch tesla-combined
+powershell -ExecutionPolicy Bypass -File .\scripts\push-tesla-branches.ps1 -Branch t-combo
 ```
 
 ## Quick Commands to Check Hygiene
@@ -117,14 +117,14 @@ git -C opendbc_repo branch --show-current
 
 Expected:
 - superproject on your Tesla feature branch
-- opendbc on `tesla-baseline` (not detached)
+- opendbc on `t-baseline` (not detached)
 
 ## PowerShell One-Liner Device Update
 
-Use this from Windows PowerShell to force-update the device to your `tesla-combined` branch, clean stale submodule directories, and reinitialize submodules.
+Use this from Windows PowerShell to force-update the device to your `t-combo` branch, clean stale submodule directories, and reinitialize submodules.
 
 ```powershell
-ssh -i "C:\Users\dave\.ssh\comma" comma@192.168.86.212 "set -e; cd /data/openpilot; git remote add dkneeland https://github.com/dkneeland/sunnypilot.git 2>/dev/null || true; git fetch dkneeland; git checkout -B tesla-combined dkneeland/tesla-combined; git reset --hard dkneeland/tesla-combined; rm -rf msgq_repo opendbc_repo panda rednose_repo teleoprtc_repo tinygrad_repo sunnypilot/neural_network_data; rm -rf .git/modules/msgq_repo .git/modules/opendbc_repo .git/modules/panda .git/modules/rednose_repo .git/modules/teleoprtc_repo .git/modules/tinygrad_repo .git/modules/sunnypilot/neural_network_data; git submodule sync --recursive; git submodule update --init --recursive; git rev-parse --short HEAD; git -C opendbc_repo rev-parse --short HEAD"
+ssh -i "C:\Users\dave\.ssh\comma" comma@192.168.86.212 "set -e; cd /data/openpilot; git remote add dkneeland https://github.com/dkneeland/sunnypilot.git 2>/dev/null || true; git fetch dkneeland; git checkout -B t-combo dkneeland/t-combo; git reset --hard dkneeland/t-combo; rm -rf msgq_repo opendbc_repo panda rednose_repo teleoprtc_repo tinygrad_repo sunnypilot/neural_network_data; rm -rf .git/modules/msgq_repo .git/modules/opendbc_repo .git/modules/panda .git/modules/rednose_repo .git/modules/teleoprtc_repo .git/modules/tinygrad_repo .git/modules/sunnypilot/neural_network_data; git submodule sync --recursive; git submodule update --init --recursive; git rev-parse --short HEAD; git -C opendbc_repo rev-parse --short HEAD"
 ```
 
 Expected output hashes at the end:
@@ -140,7 +140,7 @@ ssh -i "C:\Users\dave\.ssh\comma" comma@192.168.86.212 "sudo reboot"
 PowerShell helper script version (same workflow):
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\update-tesla-device.ps1 -Branch tesla-combined -Reboot
+powershell -ExecutionPolicy Bypass -File .\scripts\update-tesla-device.ps1 -Branch t-combo -Reboot
 ```
 
 Optional parameters:
@@ -164,7 +164,7 @@ Use incrementing tags (`v2`, `v3`) after each stable rebase/update.
 
 - If opendbc is detached again, recreate/switch branch before editing:
 ```bash
-git -C opendbc_repo switch -c tesla-baseline
+git -C opendbc_repo switch -c t-baseline
 ```
 - If tests fail after rebase, run file checks first:
 ```bash
