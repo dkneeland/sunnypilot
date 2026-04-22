@@ -14,6 +14,7 @@ nav = [
     { "Turn the speed blue" = "how-to/turn-the-speed-blue.md" },
     { "Connect to a comma 3X or four" = "how-to/connect-to-comma.md" },
     { "Add support for a car" = "how-to/car-port.md" },
+    { "Tesla feature cherry-picks" = "how-to/tesla-feature-cherry-picks.md" },
   ] },
   { "Concepts" = [
     { "Logs" = "concepts/logs.md" },
