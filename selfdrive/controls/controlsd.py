@@ -27,8 +27,6 @@ LaneChangeState = log.LaneChangeState
 LaneChangeDirection = log.LaneChangeDirection
 
 ACTUATOR_FIELDS = tuple(car.CarControl.Actuators.schema.fields.keys())
-TESLA_STEER_RATIO_TEST_OVERRIDE = 10.3
-TESLA_STEER_RATIO_LOG_INTERVAL_FRAMES = 200
 
 
 class Controls(ControlsExt):
@@ -52,7 +50,6 @@ class Controls(ControlsExt):
     self.steer_limited_by_safety = False
     self.curvature = 0.0
     self.desired_curvature = 0.0
-    self.tesla_sr_log_frame = 0
 
     self.pose_calibrator = PoseCalibrator()
     self.calibrated_pose: Pose | None = None
@@ -83,13 +80,7 @@ class Controls(ControlsExt):
     # Update VehicleModel
     lp = self.sm['liveParameters']
     x = max(lp.stiffnessFactor, 0.1)
-    learned_sr = max(lp.steerRatio, 0.1)
-    sr = learned_sr
-    if self.CP.brand == 'tesla':
-      sr = TESLA_STEER_RATIO_TEST_OVERRIDE
-      if self.tesla_sr_log_frame % TESLA_STEER_RATIO_LOG_INTERVAL_FRAMES == 0:
-        cloudlog.event("tesla_steer_ratio_override", learned_steer_ratio=learned_sr, used_steer_ratio=sr)
-      self.tesla_sr_log_frame += 1
+    sr = max(lp.steerRatio, 0.1)
     self.VM.update_params(x, sr)
 
     steer_angle_without_offset = math.radians(CS.steeringAngleDeg - lp.angleOffsetDeg)
@@ -122,7 +113,8 @@ class Controls(ControlsExt):
 
     CC.latActive = _lat_active and not CS.steerFaultTemporary and not CS.steerFaultPermanent and \
                    (not standstill or self.CP.steerAtStandstill)
-    CC.longActive = CC.enabled and (self.CP.openpilotLongitudinalControl or not self.CP_SP.pcmCruiseSpeed)
+    CC.longActive = CC.enabled and not any(e.overrideLongitudinal for e in self.sm['onroadEvents']) and \
+                    (self.CP.openpilotLongitudinalControl or not self.CP_SP.pcmCruiseSpeed)
 
     actuators = CC.actuators
     actuators.longControlState = self.LoC.long_control_state
@@ -139,9 +131,7 @@ class Controls(ControlsExt):
 
     # accel PID loop
     pid_accel_limits = self.CI.get_pid_accel_limits(self.CP, self.CP_SP, CS.vEgo, CS.vCruise * CV.KPH_TO_MS)
-    override_longitudinal = any(e.overrideLongitudinal for e in self.sm['onroadEvents'])
-    actuators.accel = float(self.LoC.update(CC.longActive, CS, long_plan.aTarget, long_plan.shouldStop,
-                                            pid_accel_limits, freeze_integrator=override_longitudinal))
+    actuators.accel = float(self.LoC.update(CC.longActive, CS, long_plan.aTarget, long_plan.shouldStop, pid_accel_limits))
 
     # Steering PID loop and lateral MPC
     # Reset desired curvature to current to avoid violating the limits on engage
