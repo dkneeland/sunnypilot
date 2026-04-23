@@ -115,6 +115,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"RouteCount", {PERSISTENT, INT, "0"}},
     {"SnoozeUpdate", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION, BOOL}},
     {"SshEnabled", {PERSISTENT | BACKUP, BOOL}},
+    {"ShutdownDebug", {PERSISTENT | BACKUP, BOOL, "0"}},
     {"TermsVersion", {PERSISTENT, STRING}},
     {"TorqueBar", {PERSISTENT | BACKUP, BOOL, "0"}},
     {"TrainingVersion", {PERSISTENT, STRING}},

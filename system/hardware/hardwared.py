@@ -210,6 +210,8 @@ def hardware_thread(end_event, hw_queue) -> None:
   thermal_config = HARDWARE.get_thermal_config()
 
   fan_controller = FanController(int(1./DT_HW))
+  shutdown_debug_prev_gates: tuple[bool, bool, bool, bool, bool] | None = None
+  shutdown_debug_last_log_ts = 0.0
 
   while not end_event.is_set():
     sm.update(PANDA_STATES_TIMEOUT)
@@ -406,7 +408,59 @@ def hardware_thread(end_event, hw_queue) -> None:
     msg.deviceState.somPowerDrawW = som_power_draw
 
     # Check if we need to shut down
-    if power_monitor.should_shutdown(onroad_conditions["ignition"], in_car, off_ts, started_seen):
+    disable_power_down = params.get_bool("DisablePowerDown")
+    force_power_down = params.get_bool("ForcePowerDown")
+    now = time.monotonic()
+    offroad_time = 0. if off_ts is None else (now - off_ts)
+    offroad_delay_met = off_ts is not None and offroad_time > 300.
+
+    should_shutdown = power_monitor.should_shutdown(onroad_conditions["ignition"], in_car, off_ts, started_seen)
+    shutdown_debug = params.get_bool("ShutdownDebug")
+    if shutdown_debug and off_ts is not None:
+      current_gates = (
+        onroad_conditions["ignition"],
+        in_car,
+        offroad_delay_met,
+        disable_power_down,
+        force_power_down,
+      )
+      edge_changed = shutdown_debug_prev_gates != current_gates
+      heartbeat_due = (now - shutdown_debug_last_log_ts) >= 5.
+      if edge_changed or heartbeat_due:
+        cloudlog.event(
+          "shutdown_gate_debug",
+          reason="edge" if edge_changed else "heartbeat",
+          ignition=onroad_conditions["ignition"],
+          in_car=in_car,
+          offroad_time=offroad_time,
+          offroad_delay_met=offroad_delay_met,
+          DisablePowerDown=disable_power_down,
+          ForcePowerDown=force_power_down,
+          started_seen=started_seen,
+          should_shutdown=should_shutdown,
+          car_voltage_mV=voltage,
+          car_battery_capacity_uWh=power_monitor.car_battery_capacity_uWh,
+        )
+        shutdown_debug_last_log_ts = now
+      shutdown_debug_prev_gates = current_gates
+    elif not shutdown_debug:
+      shutdown_debug_prev_gates = None
+
+    if should_shutdown:
+      if shutdown_debug:
+        cloudlog.event(
+          "shutdown_gate_decision",
+          ignition=onroad_conditions["ignition"],
+          in_car=in_car,
+          offroad_time=offroad_time,
+          offroad_delay_met=offroad_delay_met,
+          DisablePowerDown=disable_power_down,
+          ForcePowerDown=force_power_down,
+          started_seen=started_seen,
+          should_shutdown=should_shutdown,
+          car_voltage_mV=voltage,
+          car_battery_capacity_uWh=power_monitor.car_battery_capacity_uWh,
+        )
       cloudlog.warning(f"shutting device down, offroad since {off_ts}")
       params.put_bool("DoShutdown", True)
 

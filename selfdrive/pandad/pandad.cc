@@ -203,6 +203,43 @@ std::optional<bool> send_panda_states(PubMaster *pm, Panda *panda, bool is_onroa
 
   bool ignition_local = ((health.ignition_line_pkt != 0) || (health.ignition_can_pkt != 0)) && !always_offroad;
 
+  static Params params;
+  static bool ignition_debug_initialized = false;
+  static bool prev_ignition_local = false;
+  static bool prev_ignition_line = false;
+  static bool prev_ignition_can = false;
+  static uint8_t prev_safety_mode = 0;
+  static uint16_t prev_safety_param = 0;
+  static bool prev_power_save_enabled = false;
+
+  const bool shutdown_debug = params.getBool("ShutdownDebug");
+  if (!shutdown_debug) {
+    ignition_debug_initialized = false;
+  } else {
+    const bool ignition_line = health.ignition_line_pkt != 0;
+    const bool ignition_can = health.ignition_can_pkt != 0;
+    const bool power_save_enabled = health.power_save_enabled_pkt != 0;
+    const bool ignition_changed = !ignition_debug_initialized ||
+                                  (prev_ignition_local != ignition_local) ||
+                                  (prev_ignition_line != ignition_line) ||
+                                  (prev_ignition_can != ignition_can) ||
+                                  (prev_safety_mode != health.safety_mode_pkt) ||
+                                  (prev_safety_param != health.safety_param_pkt) ||
+                                  (prev_power_save_enabled != power_save_enabled);
+    if (ignition_changed) {
+      LOGW("shutdown_debug_ignition ignition=%d ignitionLine=%d ignitionCan=%d safetyModel=%d safetyParam=%d powerSaveEnabled=%d",
+           ignition_local, ignition_line, ignition_can,
+           (int)health.safety_mode_pkt, (int)health.safety_param_pkt, power_save_enabled);
+      ignition_debug_initialized = true;
+      prev_ignition_local = ignition_local;
+      prev_ignition_line = ignition_line;
+      prev_ignition_can = ignition_can;
+      prev_safety_mode = health.safety_mode_pkt;
+      prev_safety_param = health.safety_param_pkt;
+      prev_power_save_enabled = power_save_enabled;
+    }
+  }
+
   // Make sure CAN buses are live: safety_setter_thread does not work if Panda CAN are silent and there is only one other CAN node
   if (health.safety_mode_pkt == (uint8_t)(cereal::CarParams::SafetyModel::SILENT)) {
     panda->set_safety_model(cereal::CarParams::SafetyModel::NO_OUTPUT);
