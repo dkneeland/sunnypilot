@@ -26,8 +26,8 @@ class OnroadTimerStatus(Enum):
 
 class UIStateSP:
   def __init__(self):
+    self.CP_SP: custom.CarParamsSP = None
     self.params = Params()
-    self.CP_SP: custom.CarParamsSP | None = None
     self.has_icbm: bool = False
     self.is_sp_release: bool = self.params.get_bool("IsReleaseSpBranch")
     self.sm_services_ext = [
