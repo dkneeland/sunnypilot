@@ -208,12 +208,8 @@ def invalid_lkas_setting_alert(CP: car.CarParams, CS: car.CarState, sm: messagin
   title = "Invalid LKAS setting"
   text = "Toggle stock LKAS on or off to engage"
   if CP.brand == "tesla":
-    if CS.stockLkas:
-      title = "Disable AP"
-      text = "Switch to Traffic-Aware Cruise to engage"
-    else:
-      title = "LKAS mismatch"
-      text = "Toggle AP/TACC and retry"
+    title = "Disable AP"
+    text = "Switch to Traffic-Aware Cruise to engage"
   elif CP.brand == "mazda":
     text = "Enable your car's LKAS to engage"
   elif CP.brand == "nissan":
@@ -225,12 +221,8 @@ def invalid_lkas_setting_no_entry_alert(CP: car.CarParams, CS: car.CarState, sm:
   title = "Invalid LKAS setting"
   text = "Toggle stock LKAS on or off to engage"
   if CP.brand == "tesla":
-    if CS.stockLkas:
-      title = "Disable AP"
-      text = "Switch to Traffic-Aware Cruise to engage"
-    else:
-      title = "LKAS mismatch"
-      text = "Toggle AP/TACC and retry"
+    title = "Disable AP"
+    text = "Switch to Traffic-Aware Cruise to engage"
   elif CP.brand == "mazda":
     text = "Enable your car's LKAS to engage"
   elif CP.brand == "nissan":
