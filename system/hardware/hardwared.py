@@ -33,6 +33,9 @@ TEMP_TAU = 5.   # 5s time constant
 DISCONNECT_TIMEOUT = 5.  # wait 5 seconds before going offroad after disconnect so you get an alert
 PANDA_STATES_TIMEOUT = round(1000 / SERVICE_LIST['pandaStates'].frequency * 1.5)  # 1.5x the expected pandaState frequency
 ONROAD_CYCLE_TIME = 1  # seconds to wait offroad after requesting an onroad cycle
+PROCESS_MEMORY_SAMPLE_INTERVAL_S = 30.
+PROCESS_MEMORY_EVENT_INTERVAL_S = 120.
+PROCESS_MEMORY_HIGH_WATERMARK_PERCENT = 85
 
 ThermalBand = namedtuple("ThermalBand", ['min_temp', 'max_temp'])
 HardwareState = namedtuple("HardwareState", ['network_type', 'network_info', 'network_strength', 'network_stats',
@@ -59,6 +62,61 @@ def set_offroad_alert_if_changed(offroad_alert: str, show_alert: bool, extra_tex
     return
   prev_offroad_states[offroad_alert] = (show_alert, extra_text)
   set_offroad_alert(offroad_alert, show_alert, extra_text)
+
+
+def _sanitize_metric_suffix(name: str) -> str:
+  return ''.join(c if c.isalnum() else '_' for c in name).strip('_').lower()
+
+
+def process_memory_thread(end_event: threading.Event) -> None:
+  sm = messaging.SubMaster(["deviceState", "managerState"], poll="managerState")
+  next_sample_t = 0.
+  last_event_t = 0.
+
+  while not end_event.is_set():
+    sm.update(1000)
+    now = time.monotonic()
+    if now < next_sample_t:
+      continue
+    next_sample_t = now + PROCESS_MEMORY_SAMPLE_INTERVAL_S
+
+    process_memory_rss_mb: dict[str, float] = {}
+    for p in sm['managerState'].processes:
+      if not p.running or p.pid <= 0:
+        continue
+
+      try:
+        p_mem = psutil.Process(p.pid).memory_info()
+      except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+        continue
+
+      metric_suffix = _sanitize_metric_suffix(p.name)
+      if len(metric_suffix) == 0:
+        continue
+
+      rss_mb = float(p_mem.rss / 1e6)
+      vms_mb = float(p_mem.vms / 1e6)
+      process_memory_rss_mb[p.name] = rss_mb
+      statlog.gauge(f"process_memory_rss_mb_{metric_suffix}", rss_mb)
+      statlog.gauge(f"process_memory_vms_mb_{metric_suffix}", vms_mb)
+
+    mem_usage = sm['deviceState'].memoryUsagePercent if sm.seen['deviceState'] else int(round(psutil.virtual_memory().percent))
+    should_log_breakdown = (
+      mem_usage >= PROCESS_MEMORY_HIGH_WATERMARK_PERCENT
+      and process_memory_rss_mb
+      and (now - last_event_t) >= PROCESS_MEMORY_EVENT_INTERVAL_S
+    )
+
+    if should_log_breakdown:
+      breakdown = dict(sorted(process_memory_rss_mb.items(), key=lambda kv: kv[1], reverse=True)[:25])
+      cloudlog.event(
+        "high_memory_breakdown",
+        memoryUsagePercent=mem_usage,
+        processMemoryRssMb=breakdown,
+        processCount=len(breakdown),
+        error=True,
+      )
+      last_event_t = now
 
 def touch_thread(end_event):
   count = 0
@@ -482,6 +540,7 @@ def main():
   threads = [
     threading.Thread(target=hw_state_thread, args=(end_event, hw_queue)),
     threading.Thread(target=hardware_thread, args=(end_event, hw_queue)),
+    threading.Thread(target=process_memory_thread, args=(end_event,)),
   ]
 
   if TICI:
