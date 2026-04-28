@@ -163,7 +163,7 @@ class SelfdriveD(CruiseHelper):
     elif self.CP.passive:
       self.events.add(EventName.dashcamMode, static=True)
 
-    self.events_sp = EventsSP()
+    self.events_sp = EventsSP(self.CP_SP)
     self.events_sp_prev = []
 
     self.mads = ModularAssistiveDrivingSystem(self)

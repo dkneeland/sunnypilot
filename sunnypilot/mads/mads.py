@@ -9,6 +9,7 @@ from cereal import log, custom
 
 from opendbc.car import structs
 from opendbc.car.hyundai.values import HyundaiFlags
+from opendbc.sunnypilot.car.tesla.values import TeslaFlagsSP
 from openpilot.common.params import Params
 from openpilot.sunnypilot.mads.helpers import MadsSteeringModeOnBrake, read_steering_mode_param, MADS_NO_ACC_MAIN_BUTTON
 from openpilot.sunnypilot.mads.state import StateMachine, GEARS_ALLOW_PAUSED_SILENT
@@ -42,6 +43,7 @@ class ModularAssistiveDrivingSystem:
     self.events = self.selfdrive.events
     self.events_sp = self.selfdrive.events_sp
     self.disengage_on_accelerator = Params().get_bool("DisengageOnAccelerator")
+    self.tesla_no_vehicle_bus = self.CP.brand == "tesla" and not (self.CP_SP.flags & TeslaFlagsSP.HAS_VEHICLE_BUS)
     if self.CP.brand == "hyundai":
       if self.CP.flags & (HyundaiFlags.HAS_LDA_BUTTON | HyundaiFlags.CANFD):
         self.allow_always = True
@@ -67,6 +69,11 @@ class ModularAssistiveDrivingSystem:
       return True
 
     return False
+
+  def brake_gas_pressed(self, CS: structs.CarState) -> bool:
+    brake_rising = CS.brakePressed and not self.selfdrive.CS_prev.brakePressed
+    gas_rising = CS.gasPressed and not self.selfdrive.CS_prev.gasPressed
+    return (brake_rising and CS.gasPressed) or (gas_rising and CS.brakePressed)
 
   def should_silent_lkas_enable(self, CS: structs.CarState) -> bool:
     if self.steering_mode_on_brake == MadsSteeringModeOnBrake.PAUSE and self.pedal_pressed_non_gas_pressed(CS):
@@ -185,7 +192,9 @@ class ModularAssistiveDrivingSystem:
         self.events_sp.add(EventNameSP.lkasDisable)
 
     if self.steering_mode_on_brake == MadsSteeringModeOnBrake.DISENGAGE:
-      if self.pedal_pressed_non_gas_pressed(CS):
+      if self.tesla_no_vehicle_bus and self.enabled and self.brake_gas_pressed(CS):
+        self.events_sp.add(EventNameSP.lkasDisable)
+      elif self.pedal_pressed_non_gas_pressed(CS):
         if self.enabled:
           self.events_sp.add(EventNameSP.lkasDisable)
         else:

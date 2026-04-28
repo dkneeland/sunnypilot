@@ -7,6 +7,7 @@ See the LICENSE.md file in the root directory for more details.
 import cereal.messaging as messaging
 from cereal import log, car, custom
 from openpilot.common.constants import CV
+from opendbc.sunnypilot.car.tesla.values import TeslaFlagsSP
 from openpilot.sunnypilot.selfdrive.selfdrived.events_base import EventsBase, Priority, ET, Alert, \
   NoEntryAlert, ImmediateDisableAlert, EngagementAlert, NormalPermanentAlert, AlertCallbackType, wrong_car_mode_alert
 from openpilot.sunnypilot.selfdrive.controls.lib.speed_limit import PCM_LONG_REQUIRED_MAX_SET_SPEED, CONFIRM_SPEED_THRESHOLD
@@ -73,12 +74,31 @@ def speed_limit_pre_active_alert(CP: car.CarParams, CS: car.CarState, sm: messag
 
 
 class EventsSP(EventsBase):
-  def __init__(self):
+  def __init__(self, CP_SP: custom.CarParamsSP = None):
     super().__init__()
+    cp_sp_flags = int(CP_SP.flags) if CP_SP is not None else 0
+    self._tesla_has_vehicle_bus = bool(cp_sp_flags & TeslaFlagsSP.HAS_VEHICLE_BUS)
+    self.events_mapping = dict(EVENTS_SP)
+    self.events_mapping[EventNameSP.lkasEnable] = {
+      ET.ENABLE: self.lkas_enable_alert,
+    }
     self.event_counters = dict.fromkeys(EVENTS_SP.keys(), 0)
 
+  def lkas_enable_alert(self, CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster,
+                        metric: bool, soft_disable_time: int, personality) -> Alert:
+    if CP.brand == "tesla" and not self._tesla_has_vehicle_bus:
+      alert_size = AlertSize.none if IS_MICI else AlertSize.small
+      return Alert(
+        "MADS on: brake+gas disables",
+        "",
+        AlertStatus.normal, alert_size,
+        Priority.LOWEST, VisualAlert.none, AudibleAlert.engage, 2.5,
+      )
+
+    return EngagementAlert(AudibleAlert.engage)
+
   def get_events_mapping(self) -> dict[int, dict[str, Alert | AlertCallbackType]]:
-    return EVENTS_SP
+    return self.events_mapping
 
   def get_event_name(self, event: int):
     return EVENT_NAME_SP[event]
