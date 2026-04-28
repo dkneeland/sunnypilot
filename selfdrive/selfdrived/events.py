@@ -205,14 +205,19 @@ def personality_changed_alert(CP: car.CarParams, CS: car.CarState, sm: messaging
 
 
 def invalid_lkas_setting_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality) -> Alert:
-  text = "Toggle stock LKAS on or off to engage"
   if CP.brand == "tesla":
-    text = "Switch to Traffic-Aware Cruise Control to engage"
-  elif CP.brand == "mazda":
+    return NormalPermanentAlert("Disable AP", "Use TACC to engage")
+  text = "Toggle stock LKAS on or off to engage"
+  if CP.brand == "mazda":
     text = "Enable your car's LKAS to engage"
   elif CP.brand == "nissan":
     text = "Disable your car's stock LKAS to engage"
   return NormalPermanentAlert("Invalid LKAS setting", text)
+
+def invalid_lkas_setting_no_entry_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality) -> Alert:
+  if CP.brand == "tesla":
+    return NoEntryAlert(alert_text_1="Disable AP", alert_text_2="Use TACC to engage")
+  return NoEntryAlert("Invalid LKAS setting")
 
 
 
@@ -275,7 +280,7 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
   EventName.invalidLkasSetting: {
     ET.PERMANENT: invalid_lkas_setting_alert,
     ET.SOFT_DISABLE: invalid_lkas_setting_alert,
-    ET.NO_ENTRY: NoEntryAlert("Invalid LKAS setting"),
+    ET.NO_ENTRY: invalid_lkas_setting_no_entry_alert,
   },
 
   EventName.cruiseMismatch: {
