@@ -37,6 +37,11 @@ PROCESS_MEMORY_SAMPLE_INTERVAL_S = 30.
 PROCESS_MEMORY_EVENT_INTERVAL_S = 60.
 PROCESS_MEMORY_HIGH_WATERMARK_PERCENT = 85
 
+WATCHED_PROCESS_NAMES = {
+  "loggerd", "encoderd", "stream_encoderd", "camerad",
+  "proclogd", "logmessaged", "uploader", "sunnylink_uploader", "deleter",
+}
+
 ThermalBand = namedtuple("ThermalBand", ['min_temp', 'max_temp'])
 HardwareState = namedtuple("HardwareState", ['network_type', 'network_info', 'network_strength', 'network_stats',
                                              'network_metered', 'modem_temps'])
@@ -72,6 +77,23 @@ def process_memory_thread(end_event: threading.Event) -> None:
   sm = messaging.SubMaster(["deviceState", "managerState"], poll="managerState")
   next_sample_t = 0.
   last_event_t = 0.
+  prev_event_rss_by_name: dict[str, float] = {}
+  prev_event_io_by_name: dict[str, tuple[float, float]] = {}
+
+  def _read_meminfo() -> dict[str, float]:
+    fields = {}
+    try:
+      with open("/proc/meminfo", "r") as f:
+        for line in f:
+          parts = line.split()
+          if len(parts) >= 2:
+            try:
+              fields[parts[0].rstrip(":")] = float(parts[1]) * 1024
+            except ValueError:
+              pass
+    except Exception:
+      pass
+    return fields
 
   while not end_event.is_set():
     sm.update(1000)
@@ -81,12 +103,15 @@ def process_memory_thread(end_event: threading.Event) -> None:
     next_sample_t = now + PROCESS_MEMORY_SAMPLE_INTERVAL_S
 
     process_memory_rss_mb: dict[str, float] = {}
+    watched: dict[str, dict] = {}
+
     for p in sm['managerState'].processes:
       if not p.running or p.pid <= 0:
         continue
 
       try:
-        p_mem = psutil.Process(p.pid).memory_info()
+        proc = psutil.Process(p.pid)
+        p_mem = proc.memory_info()
       except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
         continue
 
@@ -100,19 +125,112 @@ def process_memory_thread(end_event: threading.Event) -> None:
       statlog.gauge(f"process_memory_rss_mb_{metric_suffix}", rss_mb)
       statlog.gauge(f"process_memory_vms_mb_{metric_suffix}", vms_mb)
 
+      if p.name in WATCHED_PROCESS_NAMES:
+        rss_prev = prev_event_rss_by_name.get(p.name)
+        w: dict = {
+          "rssMb": rss_mb,
+          "rssDeltaMb": (rss_mb - rss_prev) if rss_prev is not None else 0.0,
+          "vmsMb": vms_mb,
+        }
+
+        try:
+          full_info = proc.memory_full_info()
+          w["ussMb"] = float(full_info.uss / 1e6)
+          try:
+            w["pssMb"] = float(full_info.pss / 1e6)
+          except AttributeError:
+            pass
+          try:
+            w["sharedMb"] = float(full_info.shared / 1e6)
+          except AttributeError:
+            pass
+        except (AttributeError, psutil.AccessDenied, OSError):
+          pass
+
+        try:
+          w["numThreads"] = proc.num_threads()
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+          pass
+        try:
+          w["numFds"] = proc.num_fds()
+        except (AttributeError, psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, OSError):
+          pass
+
+        try:
+          io = proc.io_counters()
+          w["readBytes"] = float(io.read_bytes)
+          w["writeBytes"] = float(io.write_bytes)
+          prev_io = prev_event_io_by_name.get(p.name)
+          if prev_io is not None:
+            w["readDeltaBytes"] = w["readBytes"] - prev_io[0]
+            w["writeDeltaBytes"] = w["writeBytes"] - prev_io[1]
+        except (AttributeError, psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, OSError):
+          pass
+
+        watched[p.name] = w
+
     mem_usage = sm['deviceState'].memoryUsagePercent if sm.seen['deviceState'] else int(round(psutil.virtual_memory().percent))
     should_log_breakdown = process_memory_rss_mb and (now - last_event_t) >= PROCESS_MEMORY_EVENT_INTERVAL_S
 
     if should_log_breakdown:
-      breakdown = dict(sorted(process_memory_rss_mb.items(), key=lambda kv: kv[1], reverse=True)[:25])
+      sorted_by_rss = sorted(process_memory_rss_mb.items(), key=lambda kv: kv[1], reverse=True)
+      top_rss = dict(sorted_by_rss[:25])
+      rss_delta_by_name = {
+        name: rss_mb - prev_event_rss_by_name.get(name, rss_mb)
+        for name, rss_mb in process_memory_rss_mb.items()
+      }
+      top_rss_delta = dict(sorted(rss_delta_by_name.items(), key=lambda kv: kv[1], reverse=True)[:25])
+      total_tracked_rss = sum(process_memory_rss_mb.values())
+      total_prev = sum(prev_event_rss_by_name.get(k, v) for k, v in process_memory_rss_mb.items())
+
       high_memory = mem_usage >= PROCESS_MEMORY_HIGH_WATERMARK_PERCENT
+
+      sys_mem = psutil.virtual_memory()
+      system_mem_info = {
+        "total": sys_mem.total,
+        "available": sys_mem.available,
+        "percent": sys_mem.percent,
+        "used": sys_mem.used,
+        "free": sys_mem.free,
+      }
+      meminfo = _read_meminfo()
+      for field in ("MemAvailable", "Buffers", "Cached", "Slab", "SReclaimable", "SUnreclaim", "Shmem", "CmaTotal", "CmaFree"):
+        if field in meminfo:
+          system_mem_info[field] = meminfo[field]
+
+      watched_io: dict[str, dict] = {}
+      watched_fd_count: dict[str, int] = {}
+      watched_thread_count: dict[str, int] = {}
+      for pname, pw in watched.items():
+        pw_io = {k: v for k, v in pw.items() if k in ("readBytes", "writeBytes", "readDeltaBytes", "writeDeltaBytes")}
+        if pw_io:
+          watched_io[pname] = pw_io
+        if "numFds" in pw:
+          watched_fd_count[pname] = pw["numFds"]
+        if "numThreads" in pw:
+          watched_thread_count[pname] = pw["numThreads"]
+
       cloudlog.event(
         "high_memory_breakdown" if high_memory else "process_memory_breakdown",
         memoryUsagePercent=mem_usage,
-        processMemoryRssMb=breakdown,
-        processCount=len(breakdown),
+        totalTrackedRssMb=total_tracked_rss,
+        totalTrackedRssDeltaMb=total_tracked_rss - total_prev,
+        topRssMb=top_rss,
+        topRssDeltaMb=top_rss_delta,
+        watchedProcessMemory=watched,
+        watchedProcessIo=watched_io,
+        watchedProcessFdCount=watched_fd_count,
+        watchedProcessThreadCount=watched_thread_count,
+        systemMemInfo=system_mem_info,
+        processCount=len(process_memory_rss_mb),
         error=high_memory,
       )
+      prev_event_rss_by_name = dict(process_memory_rss_mb)
+      prev_event_io_by_name = {
+        name: (values["readBytes"], values["writeBytes"])
+        for name, values in watched.items()
+        if "readBytes" in values and "writeBytes" in values
+      }
       last_event_t = now
 
 def touch_thread(end_event):
