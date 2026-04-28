@@ -34,7 +34,7 @@ DISCONNECT_TIMEOUT = 5.  # wait 5 seconds before going offroad after disconnect 
 PANDA_STATES_TIMEOUT = round(1000 / SERVICE_LIST['pandaStates'].frequency * 1.5)  # 1.5x the expected pandaState frequency
 ONROAD_CYCLE_TIME = 1  # seconds to wait offroad after requesting an onroad cycle
 PROCESS_MEMORY_SAMPLE_INTERVAL_S = 30.
-PROCESS_MEMORY_EVENT_INTERVAL_S = 120.
+PROCESS_MEMORY_EVENT_INTERVAL_S = 60.
 PROCESS_MEMORY_HIGH_WATERMARK_PERCENT = 85
 
 ThermalBand = namedtuple("ThermalBand", ['min_temp', 'max_temp'])
@@ -101,20 +101,17 @@ def process_memory_thread(end_event: threading.Event) -> None:
       statlog.gauge(f"process_memory_vms_mb_{metric_suffix}", vms_mb)
 
     mem_usage = sm['deviceState'].memoryUsagePercent if sm.seen['deviceState'] else int(round(psutil.virtual_memory().percent))
-    should_log_breakdown = (
-      mem_usage >= PROCESS_MEMORY_HIGH_WATERMARK_PERCENT
-      and process_memory_rss_mb
-      and (now - last_event_t) >= PROCESS_MEMORY_EVENT_INTERVAL_S
-    )
+    should_log_breakdown = process_memory_rss_mb and (now - last_event_t) >= PROCESS_MEMORY_EVENT_INTERVAL_S
 
     if should_log_breakdown:
       breakdown = dict(sorted(process_memory_rss_mb.items(), key=lambda kv: kv[1], reverse=True)[:25])
+      high_memory = mem_usage >= PROCESS_MEMORY_HIGH_WATERMARK_PERCENT
       cloudlog.event(
-        "high_memory_breakdown",
+        "high_memory_breakdown" if high_memory else "process_memory_breakdown",
         memoryUsagePercent=mem_usage,
         processMemoryRssMb=breakdown,
         processCount=len(breakdown),
-        error=True,
+        error=high_memory,
       )
       last_event_t = now
 
