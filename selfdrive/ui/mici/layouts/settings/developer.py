@@ -1,11 +1,13 @@
 from openpilot.common.time_helpers import system_time_valid
 from openpilot.system.ui.widgets.scroller import NavScroller
-from openpilot.selfdrive.ui.mici.widgets.button import BigButton, BigToggle, BigParamControl, BigCircleParamControl
+from openpilot.selfdrive.ui.mici.widgets.button import BigButton, BigToggle, BigParamControl, BigCircleParamControl, BigMultiParamToggle
 from openpilot.selfdrive.ui.mici.widgets.dialog import BigDialog, BigInputDialog
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.selfdrive.ui.layouts.settings.common import restart_needed_callback
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.selfdrive.ui.widgets.ssh_key import SshKeyFetcher
+
+DEV_UI_OPTIONS = ["off", "bottom", "right", "right & bottom"]
 
 class DeveloperLayoutMici(NavScroller):
   def __init__(self):
@@ -63,6 +65,8 @@ class DeveloperLayoutMici(NavScroller):
     self._alpha_long_toggle = BigToggle("alpha longitudinal",
                                         initial_state=ui_state.params.get_bool("AlphaLongitudinalEnabled"),
                                         toggle_callback=self._on_alpha_long_enabled)
+    self._dev_ui_toggle = BigMultiParamToggle("developer UI", "DevUIInfo", DEV_UI_OPTIONS,
+                                               select_callback=self._on_dev_ui_mode_selected)
     self._debug_mode_toggle = BigParamControl("ui debug mode", "ShowDebugInfo",
                                               toggle_callback=lambda checked: (gui_app.set_show_touches(checked),
                                                                                gui_app.set_show_fps(checked)))
@@ -76,6 +80,7 @@ class DeveloperLayoutMici(NavScroller):
       self._long_maneuver_toggle,
       self._lat_maneuver_toggle,
       self._alpha_long_toggle,
+      self._dev_ui_toggle,
       self._debug_mode_toggle,
     ])
 
@@ -149,6 +154,14 @@ class DeveloperLayoutMici(NavScroller):
     # Refresh toggles from params to mirror external changes
     for key, item in self._refresh_toggles:
       item.set_checked(ui_state.params.get_bool(key))
+
+    dev_ui_idx = int(ui_state.params.get("DevUIInfo", return_default=True))
+    if 0 <= dev_ui_idx < len(DEV_UI_OPTIONS):
+      self._dev_ui_toggle.set_value(DEV_UI_OPTIONS[dev_ui_idx])
+
+  def _on_dev_ui_mode_selected(self, selected_mode: str):
+    if selected_mode in DEV_UI_OPTIONS:
+      ui_state.developer_ui = DEV_UI_OPTIONS.index(selected_mode)
 
   def _on_joystick_debug_mode(self, state: bool):
     ui_state.params.put_bool("JoystickDebugMode", state)
