@@ -215,6 +215,14 @@ class DesiredSteeringPIDElement(LateralControlElement):
     return UiElement(value, "DESIRED STEER", self.unit, color)
 
 
+def get_usage_color(percent: int) -> rl.Color:
+  if percent >= 90:
+    return rl.RED
+  if percent >= 80:
+    return rl.Color(255, 188, 0, 255)
+  return rl.WHITE
+
+
 class AEgoElement:
   def __init__(self):
     self.unit = "m/s^2"
@@ -223,6 +231,27 @@ class AEgoElement:
     a_ego = sm['carState'].aEgo
     value = f"{a_ego:.1f}"
     return UiElement(value, "ACC.", self.unit, rl.WHITE)
+
+
+class MemoryUsageElement:
+  def __init__(self):
+    self.unit = "%"
+
+  def update(self, sm, is_metric: bool) -> UiElement:
+    usage = int(sm['deviceState'].memoryUsagePercent)
+    value = f"{usage}"
+    return UiElement(value, "MEM", self.unit, get_usage_color(usage))
+
+
+class CpuUsageElement:
+  def __init__(self):
+    self.unit = "%"
+
+  def update(self, sm, is_metric: bool) -> UiElement:
+    cpu_usage = sm['deviceState'].cpuUsagePercent
+    usage = int(round(sum(cpu_usage) / len(cpu_usage))) if len(cpu_usage) else 0
+    value = f"{usage}"
+    return UiElement(value, "CPU", self.unit, get_usage_color(usage))
 
 
 class LeadSpeedElement(LeadInfoElement):

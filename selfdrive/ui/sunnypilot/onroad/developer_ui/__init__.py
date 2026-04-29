@@ -12,7 +12,8 @@ from openpilot.selfdrive.ui.sunnypilot.onroad.developer_ui.elements import (
   UiElement, RelDistElement, RelSpeedElement, SteeringAngleElement,
   DesiredLateralAccelElement, ActualLateralAccelElement, DesiredSteeringAngleElement,
   AEgoElement, LeadSpeedElement, FrictionCoefficientElement, LatAccelFactorElement,
-  SteeringTorqueEpsElement, BearingDegElement, AltitudeElement, DesiredSteeringPIDElement
+  SteeringTorqueEpsElement, BearingDegElement, AltitudeElement, DesiredSteeringPIDElement,
+  MemoryUsageElement, CpuUsageElement,
 )
 from openpilot.system.ui.lib.application import gui_app, FontWeight
 from openpilot.system.ui.lib.text_measure import measure_text_cached
@@ -53,6 +54,8 @@ class DeveloperUiRenderer(Widget):
     self.steering_torque_elem = SteeringTorqueEpsElement()
     self.bearing_elem = BearingDegElement()
     self.altitude_elem = AltitudeElement()
+    self.memory_usage_elem = MemoryUsageElement()
+    self.cpu_usage_elem = CpuUsageElement()
 
   def _update_state(self) -> None:
     self.dev_ui_mode = ui_state.developer_ui
@@ -95,6 +98,8 @@ class DeveloperUiRenderer(Widget):
       elements.append(self.desired_pid_steer_elem.update(sm, ui_state.is_metric))
 
     elements.append(self.actual_lat_accel_elem.update(sm, ui_state.is_metric))
+    elements.append(self.memory_usage_elem.update(sm, ui_state.is_metric))
+    elements.append(self.cpu_usage_elem.update(sm, ui_state.is_metric))
 
     current_y = y
     for element in elements:
@@ -137,6 +142,8 @@ class DeveloperUiRenderer(Widget):
     elements = [
       self.a_ego_elem.update(sm, ui_state.is_metric),
       self.lead_speed_elem.update(sm, ui_state.is_metric),
+      self.memory_usage_elem.update(sm, ui_state.is_metric),
+      self.cpu_usage_elem.update(sm, ui_state.is_metric),
     ]
 
     # Add torque-specific elements if using torque control
