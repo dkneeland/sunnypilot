@@ -1,8 +1,3 @@
-import os
-import signal
-import subprocess
-
-from openpilot.common.basedir import BASEDIR
 from openpilot.common.time_helpers import system_time_valid
 from openpilot.system.ui.widgets.scroller import NavScroller
 from openpilot.selfdrive.ui.mici.widgets.button import BigButton, BigToggle, BigParamControl, BigCircleParamControl
@@ -11,9 +6,6 @@ from openpilot.system.ui.lib.application import gui_app
 from openpilot.selfdrive.ui.layouts.settings.common import restart_needed_callback
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.selfdrive.ui.widgets.ssh_key import SshKeyFetcher
-
-BRIDGE_PATH = os.path.join(BASEDIR, "cereal", "messaging", "bridge")
-_bridge_proc: subprocess.Popen | None = None
 
 class DeveloperLayoutMici(NavScroller):
   def __init__(self):
@@ -60,7 +52,7 @@ class DeveloperLayoutMici(NavScroller):
                                       initial_state=ui_state.params.get_bool("JoystickDebugMode"),
                                       toggle_callback=self._on_joystick_debug_mode)
     self._can_bridge_toggle = BigToggle("can bridge",
-                                      initial_state=_bridge_proc is not None and _bridge_proc.poll() is None,
+                                      initial_state=ui_state.params.get_bool("CanBridgeEnabled"),
                                       toggle_callback=self._on_start_can_bridge)
     self._long_maneuver_toggle = BigToggle("longitudinal maneuver mode",
                                            initial_state=ui_state.params.get_bool("LongitudinalManeuverMode"),
@@ -91,6 +83,7 @@ class DeveloperLayoutMici(NavScroller):
     self._refresh_toggles = (
       ("AdbEnabled", self._adb_toggle),
       ("SshEnabled", self._ssh_toggle),
+      ("CanBridgeEnabled", self._can_bridge_toggle),
       ("JoystickDebugMode", self._joystick_toggle),
       ("LongitudinalManeuverMode", self._long_maneuver_toggle),
       ("LateralManeuverMode", self._lat_maneuver_toggle),
@@ -98,7 +91,7 @@ class DeveloperLayoutMici(NavScroller):
       ("ShowDebugInfo", self._debug_mode_toggle),
     )
     onroad_blocked_toggles = (self._adb_toggle, self._joystick_toggle)
-    release_blocked_toggles = (self._joystick_toggle, self._long_maneuver_toggle, self._lat_maneuver_toggle, self._alpha_long_toggle)
+    release_blocked_toggles = (self._joystick_toggle, self._can_bridge_toggle, self._long_maneuver_toggle, self._lat_maneuver_toggle, self._alpha_long_toggle)
     engaged_blocked_toggles = (self._long_maneuver_toggle, self._lat_maneuver_toggle, self._alpha_long_toggle)
 
     # Hide non-release toggles on release builds
@@ -165,14 +158,7 @@ class DeveloperLayoutMici(NavScroller):
     self._lat_maneuver_toggle.set_checked(False)
 
   def _on_start_can_bridge(self, state: bool):
-    global _bridge_proc
-    if state:
-      if _bridge_proc is None or _bridge_proc.poll() is not None:
-        _bridge_proc = subprocess.Popen([BRIDGE_PATH, "can"])
-    else:
-      if _bridge_proc is not None and _bridge_proc.poll() is None:
-        _bridge_proc.send_signal(signal.SIGTERM)
-        _bridge_proc = None
+    ui_state.params.put_bool("CanBridgeEnabled", state)
 
   def _on_long_maneuver_mode(self, state: bool):
     ui_state.params.put_bool("LongitudinalManeuverMode", state)
