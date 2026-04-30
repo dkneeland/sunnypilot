@@ -21,6 +21,7 @@ from enum import IntEnum
 
 if gui_app.sunnypilot_ui():
   from openpilot.selfdrive.ui.sunnypilot.mici.onroad.hud_renderer import HudRendererSP as HudRenderer
+  from openpilot.selfdrive.ui.sunnypilot.mici.onroad.system_usage_overlay import SystemUsageOverlay
   from openpilot.selfdrive.ui.sunnypilot.ui_state import OnroadTimerStatus
 
 OpState = log.SelfdriveState.OpenpilotState
@@ -158,6 +159,7 @@ class AugmentedRoadView(CameraView):
     self._alert_renderer = AlertRenderer()
     self._driver_state_renderer = DriverStateRenderer()
     self._confidence_ball = ConfidenceBall()
+    self._system_usage_overlay = SystemUsageOverlay() if gui_app.sunnypilot_ui() else None
     self._offroad_label = UnifiedLabel("start the car to\nuse sunnypilot", 54, FontWeight.DISPLAY,
                                        text_color=rl.Color(255, 255, 255, int(255 * 0.9)),
                                        alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER,
@@ -254,6 +256,9 @@ class AugmentedRoadView(CameraView):
     if not ui_state.started:
       rl.draw_rectangle(int(self.rect.x), int(self.rect.y), int(self.rect.width), int(self.rect.height), rl.Color(0, 0, 0, 175))
       self._offroad_label.render(self._rect)
+
+    if self._system_usage_overlay:
+      self._system_usage_overlay.render(self.rect)
 
     # publish uiDebug
     msg = messaging.new_message('uiDebug')
