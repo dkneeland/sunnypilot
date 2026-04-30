@@ -84,10 +84,10 @@ class DeveloperLayoutMici(NavScroller):
       self._ssh_keys_btn,
       self._joystick_toggle,
       self._can_bridge_toggle,
+      self._dev_ui_toggle,
       self._long_maneuver_toggle,
       self._lat_maneuver_toggle,
       self._alpha_long_toggle,
-      self._dev_ui_toggle,
       self._debug_mode_toggle,
     ])
 
