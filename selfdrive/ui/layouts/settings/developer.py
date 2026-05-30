@@ -1,8 +1,3 @@
-import os
-import signal
-import subprocess
-
-from openpilot.common.basedir import BASEDIR
 from openpilot.common.params import Params
 from openpilot.selfdrive.ui.widgets.ssh_key import ssh_key_item
 from openpilot.selfdrive.ui.ui_state import ui_state
@@ -16,9 +11,6 @@ from openpilot.system.ui.widgets import DialogResult
 
 if gui_app.sunnypilot_ui():
   from openpilot.system.ui.sunnypilot.widgets.list_view import toggle_item_sp as toggle_item
-
-BRIDGE_PATH = os.path.join(BASEDIR, "cereal", "messaging", "bridge")
-_bridge_proc: subprocess.Popen | None = None
 
 # Description constants
 DESCRIPTIONS = {
@@ -75,7 +67,7 @@ class DeveloperLayout(Widget):
     self._can_bridge_toggle = toggle_item(
       lambda: tr("CAN Bridge"),
       description="",
-      initial_state=_bridge_proc is not None and _bridge_proc.poll() is None,
+      initial_state=self._params.get_bool("CanBridgeEnabled"),
       callback=self._on_start_can_bridge,
     )
 
@@ -167,6 +159,7 @@ class DeveloperLayout(Widget):
     for key, item in (
       ("AdbEnabled", self._adb_toggle),
       ("SshEnabled", self._ssh_toggle),
+      ("CanBridgeEnabled", self._can_bridge_toggle),
       ("JoystickDebugMode", self._joystick_toggle),
       ("LongitudinalManeuverMode", self._long_maneuver_toggle),
       ("LateralManeuverMode", self._lat_maneuver_toggle),
@@ -174,12 +167,6 @@ class DeveloperLayout(Widget):
       ("ShowDebugInfo", self._ui_debug_toggle),
     ):
       item.action_item.set_state(self._params.get_bool(key))
-
-    # CAN bridge state lives in the module-level process, not params
-    global _bridge_proc
-    if _bridge_proc is not None and _bridge_proc.poll() is not None:
-      _bridge_proc = None
-    self._can_bridge_toggle.action_item.set_state(_bridge_proc is not None)
 
   def _on_enable_ui_debug(self, state: bool):
     self._params.put_bool("ShowDebugInfo", state)
@@ -201,14 +188,7 @@ class DeveloperLayout(Widget):
     self._lat_maneuver_toggle.action_item.set_state(False)
 
   def _on_start_can_bridge(self, state: bool):
-    global _bridge_proc
-    if state:
-      if _bridge_proc is None or _bridge_proc.poll() is not None:
-        _bridge_proc = subprocess.Popen([BRIDGE_PATH, "can"])
-    else:
-      if _bridge_proc is not None and _bridge_proc.poll() is None:
-        _bridge_proc.send_signal(signal.SIGTERM)
-        _bridge_proc = None
+    self._params.put_bool("CanBridgeEnabled", state)
 
   def _on_long_maneuver_mode(self, state: bool):
     self._params.put_bool("LongitudinalManeuverMode", state)
